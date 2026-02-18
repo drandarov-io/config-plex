@@ -32,6 +32,7 @@ Custom keybindings beyond the script defaults:
 | --- | --- |
 | `Alt+U` | Toggle RTX Upscale on/off |
 | `Alt+H` | Toggle RTX Auto HDR on/off |
+| `Alt+W` | Toggle whitepoint between HDR / SDR |
 | `Alt+J` | Show debug OSD (target gamma, ref white, filter state) |
 
 ### RTX Upscale (VSR)
@@ -55,7 +56,7 @@ Enables NVIDIA RTX Auto HDR (`nvidia-true-hdr`) which converts SDR content to HD
 
 ### HDR White Point
 
-Automatically adjusts `hdr-reference-white` based on display HDR state:
+Automatically adjusts `hdr-reference-white` based on display HDR state. Use `Alt+W` to override and toggle between HDR and SDR whitepoint manually.
 
 Edit the constants at the top of the script to match your monitor:
 
