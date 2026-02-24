@@ -33,6 +33,7 @@ Custom keybindings beyond the script defaults:
 | `Alt+U` | Toggle RTX Upscale on/off |
 | `Alt+H` | Toggle RTX Auto HDR on/off |
 | `Alt+W` | Toggle whitepoint between HDR / SDR |
+| `Alt+B` | Cycle brightness boost (2.5 → 5 → 7.5 → 10 → 15 → OFF) |
 | `Alt+J` | Show debug OSD (target gamma, ref white, filter state) |
 
 ### RTX Upscale (VSR)
@@ -65,6 +66,14 @@ local HDR_WHITE = 800   -- hdr-reference-white when display is HDR (nits)
 | Display mode | `hdr-reference-white` |
 | --- | --- |
 | HDR (PQ/HLG) | 800 nits |
-| SDR | 203 nits (mpv default) |
+| SDR | auto (mpv default: 203 nits ) |
 
 Detection uses `video-target-params/gamma` — the actual output transfer function negotiated between mpv and the display via the D3D11 swapchain.
+
+### Brightness Boost
+
+Cycles mpv's `brightness` property through preset values for a quick boost in dark scenes or dim displays.
+
+- **Default:** OFF
+- **Cycle:** `Alt+B` → 2.5 → 5 → 7.5 → 10 → 15 → OFF
+- Values are additive to mpv's 0-based default; wraps back to OFF after the last step

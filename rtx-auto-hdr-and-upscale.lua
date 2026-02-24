@@ -5,13 +5,14 @@ local mp = require 'mp'
 
 -- === CONFIG ===
 local HDR_WHITE = 800       -- hdr-reference-white when display is HDR (nits)
-local SDR_WHITE = 203       -- hdr-reference-white when display is SDR (nits)
 local ROUND_DP  = 3         -- decimal places for scale factor
+local BRIGHTNESS_STEPS = { 2.5, 5, 7.5, 10, 15 }  -- brightness boost cycle values
 
 -- Runtime state
 local vsr_enabled      = true   -- RTX upscale on by default
 local auto_hdr_enabled = true   -- RTX Auto HDR on by default
 local white_is_hdr     = nil    -- nil = auto, true/false = manual override
+local brightness_idx   = 0      -- 0 = off, 1..#BRIGHTNESS_STEPS = active step
 local applying         = false  -- re-entrancy guard
 
 -- === HELPERS ===
@@ -102,9 +103,11 @@ end
 -- === HDR WHITE POINT ===
 
 local function sync_hdr_white()
-    local hdr
-    if white_is_hdr ~= nil then hdr = white_is_hdr else hdr = is_display_hdr() end
-    mp.set_property_number("hdr-reference-white", hdr and HDR_WHITE or SDR_WHITE)
+    if white_is_hdr then
+        mp.set_property_number("hdr-reference-white", HDR_WHITE)
+    else
+        mp.set_property("hdr-reference-white", "auto")
+    end
 end
 
 -- === TOGGLES ===
@@ -122,11 +125,23 @@ local function toggle_auto_hdr()
 end
 
 local function toggle_whitepoint()
-    local current
-    if white_is_hdr ~= nil then current = white_is_hdr else current = is_display_hdr() end
-    white_is_hdr = not current
+    white_is_hdr = not white_is_hdr
     sync_hdr_white()
-    mp.osd_message("Whitepoint: " .. (white_is_hdr and HDR_WHITE or SDR_WHITE) .. " nits")
+    mp.osd_message("Whitepoint: " .. (white_is_hdr and (HDR_WHITE .. " nits") or "auto"))
+end
+
+local function cycle_brightness()
+    brightness_idx = brightness_idx + 1
+    if brightness_idx > #BRIGHTNESS_STEPS then brightness_idx = 0 end
+
+    if brightness_idx == 0 then
+        mp.set_property_number("brightness", 0)
+        mp.osd_message("Brightness boost: OFF")
+    else
+        local val = BRIGHTNESS_STEPS[brightness_idx]
+        mp.set_property_number("brightness", val)
+        mp.osd_message("Brightness boost: " .. val)
+    end
 end
 
 -- === DEBUG OSD ===
@@ -159,4 +174,5 @@ mp.register_event("file-loaded", sync_hdr_white)
 mp.add_key_binding("alt+u", "toggle_vsr", toggle_vsr)
 mp.add_key_binding("alt+h", "toggle_auto_hdr", toggle_auto_hdr)
 mp.add_key_binding("alt+w", "toggle_whitepoint", toggle_whitepoint)
+mp.add_key_binding("alt+b", "cycle_brightness", cycle_brightness)
 mp.add_key_binding("alt+j", "show_debug_osd", show_debug_osd)
