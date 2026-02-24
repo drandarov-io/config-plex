@@ -45,8 +45,6 @@ Enables RTX video upscale match display resolution. The scale factor is computed
 
 ### RTX Auto HDR
 
-⚠️ Currently broken due to [mpv issue #17265](https://github.com/mpv-player/mpv/issues/17265)
-
 Enables NVIDIA RTX Auto HDR (`nvidia-true-hdr`) which converts SDR content to HDR. Integrated into the same d3d11vpp filter. Automatically skipped for native HDR content (True HDR is SDR→HDR only).
 
 - **Default:** ON

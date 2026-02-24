@@ -37,8 +37,8 @@ end
 
 local function remove_vsr_filter()
     local vf = mp.get_property("vf") or ""
-    if string.match(vf, "@vsr") then
-        mp.command("vf remove @vsr")
+    if vf:find("@vsr") then
+        mp.commandv("vf", "remove", "@vsr")
     end
 end
 
@@ -73,13 +73,13 @@ local function apply_vsr()
     end
 
     -- Build filter: RTX VSR with optional Auto HDR (SDR content only)
-    local filter = "@vsr:d3d11vpp:scaling-mode=nvidia:scale=" .. scale
+    local filter = "@vsr:d3d11vpp=scaling-mode=nvidia:scale=" .. scale
     local use_true_hdr = auto_hdr_enabled and not is_content_hdr()
     if use_true_hdr then
-        filter = filter .. ":nvidia-true-hdr"
+        filter = filter .. ":nvidia-true-hdr=yes"
     end
 
-    mp.command("vf append " .. filter)
+    mp.commandv("vf", "append", filter)
 
     local msg = "RTX Upscale: " .. scale .. "x"
     if auto_hdr_enabled then
