@@ -22,58 +22,35 @@ local function round(value, dp)
     return math.floor(value * m + 0.5) / m
 end
 
--- Detect if mpv negotiated an HDR swapchain with the display.
-local function is_display_hdr()
-    local gamma = mp.get_property("video-target-params/gamma") or ""
-    return gamma == "pq" or gamma == "hlg"
-end
-
--- Detect if the source video is HDR (True HDR is SDR→HDR only).
-local function is_content_hdr()
-    local gamma = (mp.get_property("video-params/gamma") or ""):lower()
-    return gamma == "pq" or gamma == "hlg"
-end
-
 -- === RTX FILTER MANAGEMENT ===
-
-local function remove_rtx_filter()
-    local vf = mp.get_property("vf") or ""
-    if vf:find("@rtx") then
-        mp.commandv("vf", "remove", "@rtx")
-    end
-end
 
 local function apply_rtx()
     if applying then return end
-    applying = true
 
-    remove_rtx_filter()
+    local dw = mp.get_property_native("display-width")
+    local dh = mp.get_property_native("display-height")
+    local vw = mp.get_property_native("width")
+    local vh = mp.get_property_native("height")
+    local gamma = mp.get_property("video-target-params/gamma")
+    local content_gamma = mp.get_property("video-params/gamma")
 
-    local use_true_hdr = auto_hdr_enabled and not is_content_hdr()
-
-    if not vsr_enabled and not use_true_hdr then
-        applying = false
+    if not dw or not dh or not vw or not vh or not gamma or gamma == "" or not content_gamma or content_gamma == "" then
         return
     end
+
+    applying = true
+
+    local is_display_hdr = (gamma == "pq" or gamma == "hlg")
+    local is_content_hdr = (content_gamma:lower() == "pq" or content_gamma:lower() == "hlg")
+    local use_true_hdr = auto_hdr_enabled and not is_content_hdr and is_display_hdr
 
     local params = {}
     local scale
 
     if vsr_enabled then
-        local dw = mp.get_property_native("display-width")
-        local dh = mp.get_property_native("display-height")
-        local vw = mp.get_property_native("width")
-        local vh = mp.get_property_native("height")
-
-        if dw and dh and vw and vh then
-            scale = round(math.max(dw, dh) / math.max(vw, vh), ROUND_DP)
-            if scale > 1 then
-                table.insert(params, "scaling-mode=nvidia:scale=" .. scale)
-            else
-                mp.msg.info("No upscale needed (scale " .. scale .. ")")
-            end
-        else
-            mp.msg.warn("Missing resolution, skipping RTX upscale")
+        scale = round(math.max(dw, dh) / math.max(vw, vh), ROUND_DP)
+        if scale > 1 then
+            table.insert(params, "scaling-mode=nvidia:scale=" .. scale)
         end
     end
 
@@ -81,9 +58,36 @@ local function apply_rtx()
         table.insert(params, "nvidia-true-hdr=yes")
     end
 
+    local new_filter = ""
     if #params > 0 then
-        local filter = "@rtx:d3d11vpp=" .. table.concat(params, ":")
-        mp.commandv("vf", "append", filter)
+        new_filter = "@rtx:d3d11vpp=" .. table.concat(params, ":")
+    end
+
+    local vf = mp.get_property("vf") or ""
+    local has_rtx_filter = vf:find("@rtx")
+    local current_filter = ""
+
+    if has_rtx_filter then
+        -- extract the current @rtx filter string to compare
+        for filter in string.gmatch(vf, "[^,]+") do
+            if filter:find("@rtx") then
+                current_filter = filter
+                break
+            end
+        end
+    end
+
+    if new_filter == current_filter then
+        applying = false
+        return
+    end
+
+    if has_rtx_filter then
+        mp.commandv("vf", "remove", "@rtx")
+    end
+
+    if new_filter ~= "" then
+        mp.commandv("vf", "append", new_filter)
     end
 
     local msg = {}
@@ -144,6 +148,17 @@ local function cycle_brightness()
     end
 end
 
+local function toggle_tonemapping()
+    local tm = mp.get_property("tone-mapping")
+    if tm == "bt.2446a" then
+        mp.set_property("tone-mapping", "auto")
+        mp.osd_message("Tone-mapping: auto")
+    else
+        mp.set_property("tone-mapping", "bt.2446a")
+        mp.osd_message("Tone-mapping: bt.2446a")
+    end
+end
+
 -- === DEBUG OSD ===
 
 local function show_debug_osd()
@@ -154,10 +169,11 @@ local function show_debug_osd()
     local hwdec_cur    = mp.get_property("hwdec-current") or "nil"
     local vf           = mp.get_property("vf") or ""
     local has_rtx      = vf:find("@rtx") and "yes" or "no"
+    local tm           = mp.get_property("tone-mapping") or "nil"
 
     mp.osd_message(string.format(
-        "target gamma: %s\nsource gamma: %s\npixfmt: %s\nhwdec: %s\nhdr-ref-white: %s\nrtx filter: %s\nvsr: %s | auto_hdr: %s",
-        target_gamma, source_gamma, pixfmt, hwdec_cur, refwhite, has_rtx,
+        "target gamma: %s\nsource gamma: %s\npixfmt: %s\nhwdec: %s\nhdr-ref-white: %s\ntone-mapping: %s\nrtx filter: %s\nvsr: %s | auto_hdr: %s",
+        target_gamma, source_gamma, pixfmt, hwdec_cur, refwhite, tm, has_rtx,
         tostring(vsr_enabled), tostring(auto_hdr_enabled)
     ), 6)
 end
@@ -166,6 +182,7 @@ end
 
 apply_rtx()
 mp.observe_property("video-params/pixelformat", "native", apply_rtx)
+mp.observe_property("video-target-params/gamma", "string", apply_rtx)
 
 sync_hdr_white()
 mp.observe_property("video-target-params/gamma", "string", sync_hdr_white)
@@ -175,4 +192,5 @@ mp.add_key_binding("alt+u", "toggle_vsr", toggle_vsr)
 mp.add_key_binding("alt+h", "toggle_auto_hdr", toggle_auto_hdr)
 mp.add_key_binding("alt+w", "toggle_whitepoint", toggle_whitepoint)
 mp.add_key_binding("alt+b", "cycle_brightness", cycle_brightness)
+mp.add_key_binding("alt+c", "toggle_tonemapping", toggle_tonemapping)
 mp.add_key_binding("alt+j", "show_debug_osd", show_debug_osd)

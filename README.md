@@ -33,6 +33,7 @@ Custom keybindings beyond the script defaults:
 | `Alt+U` | Toggle RTX Upscale on/off |
 | `Alt+H` | Toggle RTX Auto HDR on/off |
 | `Alt+W` | Toggle whitepoint between HDR / SDR |
+| `Alt+C` | Toggle SDR tone-mapping auto / bt.2446a |
 | `Alt+B` | Cycle brightness boost (2.5 → 5 → 7.5 → 10 → 15 → OFF) |
 | `Alt+J` | Show debug OSD (target gamma, ref white, filter state) |
 
@@ -70,6 +71,12 @@ local HDR_WHITE = 800   -- hdr-reference-white when display is HDR (nits)
 
 Detection uses `video-target-params/gamma` — the actual output transfer function negotiated between mpv and the display via the D3D11 swapchain.
 
+### SDR Tone-mapping
+
+Toggles the SDR `tone-mapping` between `auto` (often dynamic `spline` on `gpu-next`) and the static `bt.2446a` curve. Useful when some incredibly bright HDR metadata causes an SDR output to compress midtones entirely and look overly dark.
+
+- **Toggle:** `Alt+C`
+
 ### Brightness Boost
 
 Cycles mpv's `brightness` property through preset values for a quick boost in dark scenes or dim displays.
@@ -77,3 +84,11 @@ Cycles mpv's `brightness` property through preset values for a quick boost in da
 - **Default:** OFF
 - **Cycle:** `Alt+B` → 2.5 → 5 → 7.5 → 10 → 15 → OFF
 - Values are additive to mpv's 0-based default; wraps back to OFF after the last step
+
+### Notes
+
+SDR to HDR Mapping:
+
+- Either no NVIDIA Video HDR and `whitepoint` 800 bit (`tone-mapping` does not matter),
+- or NVIDIA Video HDR on with `tone-mapping=bt.2446a` (`whitepoint` does not matter)
+- NVIDIA Video HDR + `tone-mapping=bt.2446a` tends to look better
