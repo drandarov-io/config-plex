@@ -4,8 +4,10 @@
 local mp = require 'mp'
 
 -- === CONFIG ===
-local HDR_WHITE = 800       -- hdr-reference-white when display is HDR (nits)
-local ROUND_DP  = 3         -- decimal places for scale factor
+local HDR_WHITE   = 800     -- hdr-reference-white when display is HDR (nits)
+local HDR_PEAK    = 800     -- target-peak when display is HDR (nits)
+local HDR_RECOVER = 0.3     -- hdr-contrast-recovery strength when display is HDR
+local ROUND_DP    = 2       -- decimal places for scale factor
 local BRIGHTNESS_STEPS = { 2.5, 5, 7.5, 10, 15 }  -- brightness boost cycle values
 
 -- Runtime state
@@ -114,6 +116,33 @@ local function sync_hdr_white()
     end
 end
 
+-- === HDR DISPLAY PROPERTIES ===
+-- Sets target-peak, inverse-tone-mapping, hdr-contrast-recovery only when
+-- the display is actually in HDR mode. target-peak > 203 in SDR forces mpv
+-- into HDR-like processing, so these must be conditional.
+
+local last_display_hdr = nil
+
+local function sync_hdr_display()
+    local gamma = mp.get_property("video-target-params/gamma")
+    if not gamma or gamma == "" then return end
+
+    local is_hdr = (gamma == "pq" or gamma == "hlg")
+
+    if is_hdr == last_display_hdr then return end
+    last_display_hdr = is_hdr
+
+    if is_hdr then
+        mp.set_property_number("target-peak", HDR_PEAK)
+        mp.set_property_number("hdr-contrast-recovery", HDR_RECOVER)
+        mp.set_property_bool("inverse-tone-mapping", true)
+    else
+        mp.set_property("target-peak", "auto")
+        mp.set_property_number("hdr-contrast-recovery", 0)
+        mp.set_property_bool("inverse-tone-mapping", false)
+    end
+end
+
 -- === TOGGLES ===
 
 local function toggle_vsr()
@@ -148,15 +177,20 @@ local function cycle_brightness()
     end
 end
 
+local TONEMAP_CYCLE = { "auto", "bt.2446a", "st2094-40", "spline", "hable" }
+local tonemap_idx = 1
+
 local function toggle_tonemapping()
-    local tm = mp.get_property("tone-mapping")
-    if tm == "bt.2446a" then
-        mp.set_property("tone-mapping", "auto")
-        mp.osd_message("Tone-mapping: auto")
-    else
-        mp.set_property("tone-mapping", "bt.2446a")
-        mp.osd_message("Tone-mapping: bt.2446a")
-    end
+    tonemap_idx = tonemap_idx % #TONEMAP_CYCLE + 1
+    local tm = TONEMAP_CYCLE[tonemap_idx]
+    mp.set_property("tone-mapping", tm)
+    mp.osd_message("Tone-mapping: " .. tm)
+end
+
+local function toggle_compute_peak()
+    local cur = mp.get_property_bool("hdr-compute-peak")
+    mp.set_property_bool("hdr-compute-peak", not cur)
+    mp.osd_message("hdr-compute-peak: " .. (not cur and "ON" or "OFF"))
 end
 
 -- === DEBUG OSD ===
@@ -170,11 +204,18 @@ local function show_debug_osd()
     local vf           = mp.get_property("vf") or ""
     local has_rtx      = vf:find("@rtx") and "yes" or "no"
     local tm           = mp.get_property("tone-mapping") or "nil"
+    local cpeak        = mp.get_property("hdr-compute-peak") or "nil"
+    local crecov       = mp.get_property("hdr-contrast-recovery") or "nil"
+    local tpeak        = mp.get_property("target-peak") or "nil"
+    local itm          = mp.get_property("inverse-tone-mapping") or "nil"
 
     mp.osd_message(string.format(
-        "target gamma: %s\nsource gamma: %s\npixfmt: %s\nhwdec: %s\nhdr-ref-white: %s\ntone-mapping: %s\nrtx filter: %s\nvsr: %s | auto_hdr: %s",
-        target_gamma, source_gamma, pixfmt, hwdec_cur, refwhite, tm, has_rtx,
-        tostring(vsr_enabled), tostring(auto_hdr_enabled)
+        "target gamma: %s\nsource gamma: %s\npixfmt: %s\nhwdec: %s\n" ..
+        "hdr-ref-white: %s\ntone-mapping: %s\nhdr-compute-peak: %s\n" ..
+        "hdr-contrast-recovery: %s\ntarget-peak: %s\ninverse-tone-mapping: %s\n" ..
+        "rtx filter: %s\nvsr: %s | auto_hdr: %s",
+        target_gamma, source_gamma, pixfmt, hwdec_cur, refwhite, tm, cpeak,
+        crecov, tpeak, itm, has_rtx, tostring(vsr_enabled), tostring(auto_hdr_enabled)
     ), 6)
 end
 
@@ -188,9 +229,14 @@ sync_hdr_white()
 mp.observe_property("video-target-params/gamma", "string", sync_hdr_white)
 mp.register_event("file-loaded", sync_hdr_white)
 
+sync_hdr_display()
+mp.observe_property("video-target-params/gamma", "string", sync_hdr_display)
+mp.register_event("file-loaded", sync_hdr_display)
+
 mp.add_key_binding("alt+u", "toggle_vsr", toggle_vsr)
 mp.add_key_binding("alt+h", "toggle_auto_hdr", toggle_auto_hdr)
 mp.add_key_binding("alt+w", "toggle_whitepoint", toggle_whitepoint)
 mp.add_key_binding("alt+b", "cycle_brightness", cycle_brightness)
 mp.add_key_binding("alt+c", "toggle_tonemapping", toggle_tonemapping)
+mp.add_key_binding("alt+p", "toggle_compute_peak", toggle_compute_peak)
 mp.add_key_binding("alt+j", "show_debug_osd", show_debug_osd)
